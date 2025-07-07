@@ -1,0 +1,57 @@
+!pip install pdfplumber ftfy pandas sentence-transformers langchain chromadb
+
+import pdfplumber
+import re
+import ftfy
+import json
+from sentence_transformers import SentenceTransformer
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from google.colab import files
+
+# Passo 1: Fazer upload do PDF
+uploaded = files.upload()  # Vai abrir a interface para enviar o PDF
+
+# Pega o nome do arquivo enviado
+pdf_path = list(uploaded.keys())[0]
+
+print(f"Arquivo PDF enviado: {pdf_path}")
+
+# Função para extrair e limpar texto do PDF
+def extrair_texto(pdf_path):
+    texto = ""
+    with pdfplumber.open(pdf_path) as pdf:
+        for pagina in pdf.pages:
+            texto += pagina.extract_text() + "\n"
+    texto = ftfy.fix_text(texto)
+    texto = re.sub(r'\s+', ' ', texto)
+    texto = re.sub(r'[^a-zA-ZÀ-ÿ0-9,.!?;:()\-– ]', '', texto)
+    texto = re.sub(r'\s+([,.!?;:])', r'\1', texto)
+    return texto.strip()
+
+# Gerar chunks e embeddings
+def gerar_chunks_embeddings(texto):
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    chunks = splitter.split_text(texto)
+    modelo = SentenceTransformer("all-MiniLM-L6-v2")
+    embeddings = modelo.encode(chunks)
+    return chunks, embeddings
+
+# Salvar o JSON localmente no Colab
+def salvar_json(chunks, embeddings, caminho_saida):
+    with open(caminho_saida, "w", encoding="utf-8") as f:
+        json.dump({
+            "chunks": chunks,
+            "embeddings": embeddings.tolist()
+        }, f, ensure_ascii=False)
+
+# Processar PDF
+texto = extrair_texto(pdf_path)
+chunks, embeddings = gerar_chunks_embeddings(texto)
+
+saida_json = "cliente_joao.json"
+salvar_json(chunks, embeddings, saida_json)
+
+print("✅ JSON com embeddings criado com sucesso!")
+
+# Fazer o download do JSON para seu computador
+files.download(saida_json)
